@@ -7,28 +7,32 @@
 //
 
 import UIKit
+import CoreData
 
-class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, NSFetchedResultsControllerDelegate, TaskDetailViewControllerDelegate, AddTaskViewControllerDelegate {
 
     @IBOutlet weak var tableView: UITableView!
     
-    var taskArray:[TaskModel] = []
+    let managedObjectContext = (UIApplication.sharedApplication().delegate as AppDelegate).managedObjectContext!
+    var fetchedResultsController:NSFetchedResultsController = NSFetchedResultsController()
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         
-        let date1 = Date.from(year: 2014, month: 05, day: 20)
-        let date2 = Date.from(year: 2014, month: 03, day: 3)
-        let date3 = Date.from(year: 2014, month: 12, day: 13)
+        self.view.backgroundColor = UIColor(patternImage: UIImage (named: "Background")!)
         
-        let task1 = TaskModel(task: "Study French", subtask: "Verbs", date: date1)
-        let task2 = TaskModel(task: "Eat Dinner", subtask: "Burgers", date: date2)
         
-        taskArray = [task1,task2,TaskModel(task: "Gym", subtask: "Leg day", date: date3)]
+        fetchedResultsController = getFetchResultsController()
+        fetchedResultsController.delegate = self
+        fetchedResultsController.performFetch(nil)
+        
+    }
+    
+    override func viewDidAppear(animated: Bool) {
+        super.viewDidAppear(animated)
+        
 
-        
-        self.tableView.reloadData()
     }
 
     override func didReceiveMemoryWarning() {
@@ -41,12 +45,13 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         if segue.identifier == "showTaskDetail" {
             let detailVC: TaskDetailViewController = segue.destinationViewController as TaskDetailViewController
             let indexPath = self.tableView.indexPathForSelectedRow()
-            let thisTask = taskArray[indexPath!.row]
+            let thisTask = fetchedResultsController.objectAtIndexPath(indexPath!) as TaskModel
             detailVC.detailTaskModel = thisTask
+            detailVC.delegate = self
         }
         else if segue.identifier == "showTaskAdd" {
             let addTaskVC:AddTaskViewController = segue.destinationViewController as AddTaskViewController
-            addTaskVC.mainVC = self
+            addTaskVC.delegate = self
         }
         
     }
@@ -57,15 +62,19 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     
     
     // UITableViewDataSource
+    
+    func numberOfSectionsInTableView(tableView: UITableView) -> Int {
+        return fetchedResultsController.sections!.count
+    }
+    
     func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         
-        
-        return taskArray.count
+        return fetchedResultsController.sections![section].numberOfObjects
     }
     
     func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
         
-        let thisTask = taskArray[indexPath.row]
+        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath) as TaskModel
         
         var cell: TaskCell = tableView.dequeueReusableCellWithIdentifier("myCell") as TaskCell
         
@@ -73,14 +82,94 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         cell.descriptionLabel.text = thisTask.subtask
         cell.dateLabel.text = Date.toString(date: thisTask.date)
         
+        println("returning cell")
         return cell
+    
     }
     
     // UITableViewDelegate
+    
     func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
         println(indexPath.row)
         
         performSegueWithIdentifier("showTaskDetail", sender: self)
     }
+    
+    func tableView(tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        return 25
+    }
+
+    func tableView(tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        if section == 0 {
+            return "To do"
+        }
+        else {
+            return "Completed"
+        }
+    }
+    
+    func tableView(tableView: UITableView, commitEditingStyle editingStyle: UITableViewCellEditingStyle, forRowAtIndexPath indexPath: NSIndexPath) {
+        
+        let thisTask = fetchedResultsController.objectAtIndexPath(indexPath) as TaskModel
+        
+        if thisTask.completed == true {
+            thisTask.completed == false
+        } else {
+            thisTask.completed == true
+        }
+        
+        (UIApplication.sharedApplication().delegate as AppDelegate).saveContext()
+    }
+    
+    // NSFtechedResultControllerDelegate
+    
+    func controllerDidChangeContent(controller: NSFetchedResultsController) {
+        tableView.reloadData()
+    }
+    
+    // Helper
+    
+    func taskFetchRequest() -> NSFetchRequest {
+        let fetchRequest = NSFetchRequest(entityName: "TaskModel")
+        let sortDescriptor = NSSortDescriptor(key: "date", ascending: true)
+        let completedDescriptor = NSSortDescriptor(key: "completed", ascending: true)
+        fetchRequest.sortDescriptors = [completedDescriptor, sortDescriptor]
+        
+        return fetchRequest
+    }
+    
+    func getFetchResultsController() -> NSFetchedResultsController {
+        
+        fetchedResultsController = NSFetchedResultsController(fetchRequest: taskFetchRequest(), managedObjectContext: managedObjectContext, sectionNameKeyPath: "completed", cacheName: nil)
+        
+        return fetchedResultsController
+    }
+    
+    // taskDetailViewControllerDelegate
+    
+    func taskDetailEdited() {
+        
+        showAlert()
+    }
+    
+    // AddTaskViewControllerDelegate
+    
+    func addTaskCancelled(message: String) {
+        showAlert(message: message)
+    }
+    
+    func addTask(message: String) {
+        showAlert(message: message)
+    }
+    
+    func showAlert(message:String = "Contratulations") {
+        var alert = UIAlertController(title: "Change Made!", message: message, preferredStyle: UIAlertControllerStyle.Alert)
+        alert.addAction(UIAlertAction(title: "Ok!", style: UIAlertActionStyle.Default, handler: nil))
+        self.presentViewController(alert, animated: true, completion: nil)
+    }
+    
+    
+    
+    
 }
 
